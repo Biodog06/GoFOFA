@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -422,6 +423,7 @@ func (c *Client) HostSearch(query string, size int, fields []string, options ...
 		}
 
 		res = append(res, results...)
+		log.Printf("size: %d for query: %s", len(res), query)
 
 		// 数据填满了，完成
 		if size != -1 && size <= len(res) {
