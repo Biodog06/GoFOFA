@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -467,4 +468,55 @@ func TestClient_BatchSizeWithBodyField(t *testing.T) {
 		return nil
 	})
 	assert.Nil(t, err)
+}
+
+func TestClient_BatchSizeAutomaticCapping(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(queryHander))
+	defer ts.Close()
+
+	// 使用高级会员账号，避免 100 条的免费限制
+	account := validAccounts[3]
+
+	// 设置日志钩子来捕获警告
+	var logs []string
+	logger := logrus.New()
+	logger.AddHook(&testHook{f: func(e *logrus.Entry) {
+		logs = append(logs, e.Message)
+	}})
+
+	cli, err := NewClient(WithURL(ts.URL+"?email="+account.Email+"&key="+account.Key), WithLogger(logger))
+	assert.Nil(t, err)
+
+	// 测试 1: 包含 body 字段，且不指定 BatchSize (即为 0)
+	// 预期行为：内部逻辑应该触发警告并设置 batchSize 为 500
+	// 这里 size 设置为 10，因为 mock server 对 size=10 有完整的 10 条数据返回
+	res, err := cli.HostSearch("port=80", 10, []string{"ip", "port", "body"}, SearchOptions{BatchSize: 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 10, len(res))
+
+	// 验证是否触发了自动调优 batchSize 的警告
+	foundWarning := false
+	for _, l := range logs {
+		if strings.Contains(l, "fields contains body, change batchSize to 500") {
+			foundWarning = true
+			break
+		}
+	}
+	assert.True(t, foundWarning, "Should have found auto-capping warning in logs")
+
+	// 测试 2: 不包含 body 字段，不指定 BatchSize
+	// 预期行为：不应该触发 body 相关的自动降级警告
+	logs = nil
+	res, err = cli.HostSearch("port=80", 10, []string{"ip", "port"}, SearchOptions{BatchSize: 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 10, len(res))
+
+	foundWarning = false
+	for _, l := range logs {
+		if strings.Contains(l, "fields contains body, change batchSize to 500") {
+			foundWarning = true
+			break
+		}
+	}
+	assert.False(t, foundWarning, "Should NOT have found auto-capping warning for non-body fields")
 }

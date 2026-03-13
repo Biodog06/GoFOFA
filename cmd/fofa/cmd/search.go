@@ -101,8 +101,8 @@ var searchCmd = &cli.Command{
 		&cli.IntFlag{
 			Name:        "batchSize",
 			Aliases:     []string{"bs"},
-			Value:       1000,
-			Usage:       "amount of data contained in each page batch",
+			Value:       0,
+			Usage:       "amount of data contained in each page batch, default 1000",
 			Destination: &batchSize,
 		},
 		&cli.BoolFlag{
